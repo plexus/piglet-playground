@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+<!-- "astring": "https://cdn.jsdelivr.net/npm/astring@latest/dist/astring.mjs",
+    "solid-js": "https://cdn.jsdelivr.net/npm/solid-js@latest/dist/solid.js",
+    "solid-js/web": "https://cdn.jsdelivr.net/npm/solid-js@latest/web/dist/web.js"}}
+-->
+    <script type="importmap">
+      {"imports":
+       {"astring": "/piglet/node_modules/astring/dist/astring.mjs",
+        "solid-js": "/self/node_modules/solid-js/dist/solid.js",
+        "solid-js/web": "/self/node_modules/solid-js/web/dist/web.js"
+      }}
+    </script>
+    <script type="application/javascript" src="https://unpkg.com/source-map@0.7.3/dist/source-map.js"></script>
+    <script type="module" src="/piglet/lib/piglet/browser/main.mjs?verbosity=1"></script>
+    <script type="piglet">
+      (load-package "/self")
+      (require 'https://piglet-lang.org/packages/piglet:pdp-client)
+      (require 'https://piglet-lang.org/packages/piglet-playground:main)
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
