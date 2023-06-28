@@ -3,20 +3,12 @@
     [solid :from solid:solid]
     [dom :from piglet:dom]
     [styling :from styling]
-    [webaudio :from webaudio])
-  (:context {"user" "https://vocab.gaiwan.co/user#"}))
-
-(inspect
-  :user:name)
-
-(:user:name
-  {:user:name "Arne"})
-
-:co.gaiwan.user/name
+    [webaudio :from webaudio]))
 
 (styling:style!
   (list
-    [:body {:background-color "#f5d576" :font-family "serif"}]
+    [:body {:background-color "#f5d576"
+            :font-family "serif"}]
 
     [:#app
      {:display :flex
@@ -25,30 +17,68 @@
       :justify-content :center
       :align-items :center}]
 
+    [:input
+     {:width "30px"
+      :height "200px"
+      :padding "1rem"}]
+
+    [:button
+     {:font-size "1.5rem"
+      :border "none"
+      :border-radius "0.5rem"
+      :box-shadow "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px"}]
+
     [:.getting-started
      {:font-size "2rem"
       :padding "1rem 2rem"
-      :border "none"
-      :border-radius "0.5rem"
-      :box-shadow "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px"}]))
+      }]))
 
-(def slider-value (solid:signal 200))
+(def sliders (solid:signal [{:min 0 :max 1000 :val 500}]))
+(def slide-count (solid:reaction (println "count changed") (count @sliders)))
+(def slide-reactions (solid:reaction
+                       (println "slide-reactions")
+                       (for [idx (range @slide-count)]
+                         (solid:reaction
+                           (println "inner slide-reaction")
+                           (assoc (get @sliders idx) :idx idx)))))
 
-(fqn
-  (resolve 'app))
+(defn slider [opts]
+  (println "UI" opts)
+  (let [opts @opts
+        val (:val opts)
+        min (:min opts 0)
+        max (:max opts 1000)]
+    (fn []
+      (solid:dom
+        [:input {:type "range"
+                 :min min
+                 :max max
+                 :orient "vertical"
+                 :value val
+                 :on-input (fn [e] (swap! sliders assoc-in [(:idx opts) :val]
+                                     (js:parseInt (.-value (.-target e)) 10)))}]))))
+(defn ui []
+  (println "UI")
+  (let [susp? (solid:signal (webaudio:suspended?))]
+    (fn []
+      (solid:dom
+        [:div
+         [:button {:on-click (do
+                               (reset! susp? (not (webaudio:suspended?)))
+                               (if (webaudio:suspended?)
+                                 (webaudio:resume!)
+                                 (webaudio:suspend!)))}
+          (if @susp? [:span "▶️"] [:span "⏸️"])]
+         (for [r @slide-reactions]
+           [slider r])]))))
 
 (defn app []
   (solid:dom
     (if (not @webaudio:ctx)
       [:button.getting-started {:on-click (webaudio:init!)}
        "Get started!"]
-      [:div
-       [:p "vibes"]
-       [:input {:type "range"
-                :min 50
-                :max 1000
-                :value @slider-value
-                :on-input (fn [e] (reset! slider-value (.-value (.-target e))))}]])))
+      [ui]
+      )))
 
 (solid:render
   (fn []
@@ -83,7 +113,7 @@
     (osc {:frequency (mix
                        (gain {:in (osc {:frequency lfo-freq :type "sine"})
                               :gain lfo-gain})
-                       (constant {:offset freq}))
+                       (constant {:offset slider-value}))
           :type "square"}))
 
   (def o

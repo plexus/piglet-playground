@@ -67,3 +67,12 @@
     (doseq [[in idx] (map list ins (range))]
       (.connect in merger 0 idx))
     merger))
+
+(defn suspend! []
+  (.suspend @ctx))
+
+(defn resume! []
+  (.resume @ctx))
+
+(defn suspended? []
+  (= "suspended" (.-state @ctx)))

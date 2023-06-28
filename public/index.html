@@ -2,7 +2,8 @@
 <html>
   <head>
     <meta charset="utf-8">
-<!-- "astring": "https://cdn.jsdelivr.net/npm/astring@latest/dist/astring.mjs",
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <!-- "astring": "https://cdn.jsdelivr.net/npm/astring@latest/dist/astring.mjs",
     "solid-js": "https://cdn.jsdelivr.net/npm/solid-js@latest/dist/solid.js",
     "solid-js/web": "https://cdn.jsdelivr.net/npm/solid-js@latest/web/dist/web.js"}}
 -->
@@ -18,6 +19,7 @@
     <script type="piglet">
       (load-package "/self")
       (require 'https://piglet-lang.org/packages/piglet:pdp-client)
+      (https://piglet-lang.org/packages/piglet:pdp-client:connect! "ws://192.168.0.136:17017")
       (require 'https://piglet-lang.org/packages/piglet-playground:main)
     </script>
   </head>
