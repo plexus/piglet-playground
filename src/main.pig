@@ -8,9 +8,11 @@
 (styling:style!
   (list
     [:body {:background-color "#f5d576"
-            :font-family "serif"
+            :font-family "monospace"
             :overflow "hidden"
             :margin 0}]
+
+    [:pre {:margin 0}]
 
     [:#app
      {:display :flex
@@ -22,7 +24,7 @@
     [:.handle
      {:color "hsla(200, 20%, 70%)"
       :cursor "grab"
-      :font-size "120%"}]
+      :font-size "130%"}]
     [:.dragging {:cursor "grabbing"}]
 
     [:input
@@ -130,32 +132,32 @@
   (->pig (.getBoundingClientRect el)))
 
 (def currently-dragging (reference nil))
-(def zoom (solid:signal 1))
+(def zoom (solid:signal 1.5))
 
 (defn rand-int [n]
   (js:Math.round (* n (js:Math.random))))
 
 (defn handle-global-mouse-move [e]
   (when-let [el @currently-dragging]
-    ;; (if (= 0 (.-buttons e))
-    ;;   (reset! currently-dragging nil))
-    (let [handle (dom:query el ".handle")
-          bounds (bounding-rect handle)
-          [x y] (event-pos e)
-          ;; Offset to middle of handle
-          x (- x (/ (:width bounds) 2))
-          y (- y (/ (:height bounds) 2))
-          ;; Offset from middle of viewport
-          vw2 (/ js:window.innerWidth 2)
-          vh2 (/ js:window.innerHeight 2)
-          x (- x vw2)
-          y (- y vh2)
-          ;; apply zoom
-          x (/ x @zoom)
-          y (/ y @zoom)
-          ;; shift back
-          x (+ x vw2)
-          y (+ y vh2)]
+    (if (= 0 (.-buttons e))
+      (reset! currently-dragging nil)
+      (let [handle (dom:query el ".handle")
+            bounds (bounding-rect handle)
+            [x y] (event-pos e)
+            ;; Offset to middle of handle
+            x (- x (/ (:width bounds) 2))
+            y (- y (/ (:height bounds) 2))
+            ;; Offset from middle of viewport
+            vw2 (/ js:window.innerWidth 2)
+            vh2 (/ js:window.innerHeight 2)
+            x (- x vw2)
+            y (- y vh2)
+            ;; apply zoom
+            x (/ x @zoom)
+            y (/ y @zoom)
+            ;; shift back
+            x (+ x vw2)
+            y (+ y vh2)]
         (println [x y] (:width bounds) (:height bounds))
         (dom:set-attr el
           :style {:position "absolute"
@@ -164,7 +166,7 @@
                   :transform (str "translate(" x "px" "," y "px" ")")
                   :left 0
                   :top 0
-                  :user-select "none"}))))
+                  :user-select "none"})))))
 
 (listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
 (listen! js:document ::drag-component "mousemove" handle-global-mouse-move)
@@ -202,24 +204,22 @@
   (solid:dom
     [draggable
      (solid:dom
-       [:div
-        [:br]
-        [:br]
-        "OSC " hz "Hz"
-        [:br]
-        [:br]
-        "      ⚇    "])]))
+       [:pre
+        "OSC\n"
+        hz "Hz"
+        "  ⚇"
+        ])]))
 
 (defn speaker []
   (solid:dom
     [draggable
      (solid:dom
        [:pre
-        "      _\n"
-        "     /|  ⢁ \n"
-        "⚇ [⣿⣿ } ⡱ ⡇ \n"
-        "     \\|  ⡈ \n"
-        "      `\n"
+        "     _\n"
+        "    /|   ⢁ \n"
+        "⚉ [⣿ } ⡱ ⡇ \n"
+        "    \\|   ⡈ \n"
+        "     `\n"
         ])])
   )
 
