@@ -3,14 +3,18 @@
     [solid :from solid:solid]
     [dom :from piglet:dom]
     [styling :from styling]
-    [webaudio :from webaudio]))
+    [webaudio :from webaudio]
+    [solid-js :from "solid-js"]
+    [solid-web :from "solid-js/web"]
+    [catenary :from "/self/node_modules/catenary-curve/lib/catenary-curve.js"]))
 
 (styling:style!
   (list
     [:body {:background-color "#f5d576"
             :font-family "monospace"
             :overflow "hidden"
-            :margin 0}]
+            :margin 0
+            :user-select "none"}]
 
     [:pre {:margin 0}]
 
@@ -49,7 +53,12 @@
       :text-align "center"}]
 
     [:.flex
-     {:display "flex"}]))
+     {:display "flex"}]
+
+    [:.positioned
+     {:position "absolute"
+      :top 0 :left 0}]
+    ))
 
 (def sliders (solid:signal []))
 
@@ -132,12 +141,40 @@
   (->pig (.getBoundingClientRect el)))
 
 (def currently-dragging (reference nil))
-(def zoom (solid:signal 1.5))
+(def zoom (solid:signal 1))
 
 (defn rand-int [n]
   (js:Math.round (* n (js:Math.random))))
 
+
+(defn move-to [el x y]
+  (let [;; Offset from middle of viewport
+        vw2 (/ js:window.innerWidth 2)
+        vh2 (/ js:window.innerHeight 2)
+        x (- x vw2)
+        y (- y vh2)
+        ;; apply zoom
+        x (/ x @zoom)
+        y (/ y @zoom)
+        ;; shift back
+        x (+ x vw2)
+        y (+ y vh2)]
+    (dom:set-attr el
+      :style {:position "absolute"
+              ;; :left (str (- x (/ (:width bounds) 2)) "px")
+              ;; :top (str (- y (/ (:height bounds) 2)) "px")
+              :transform (str "translate(" x "px" "," y "px" ")")
+              :left 0
+              :top 0
+              })
+    (let [event (js:CustomEvent. "position-changed" #js {:bubbles "false"})]
+      ((fn dispatch [el]
+         (.dispatchEvent el event)
+         (run! dispatch (into-array (dom:children el)))) el))))
+
 (defn handle-global-mouse-move [e]
+  (set! (.-innerHTML (dom:query js:document ".mouse-pos"))
+    (print-str (event-pos e)))
   (when-let [el @currently-dragging]
     (if (= 0 (.-buttons e))
       (reset! currently-dragging nil)
@@ -146,27 +183,8 @@
             [x y] (event-pos e)
             ;; Offset to middle of handle
             x (- x (/ (:width bounds) 2))
-            y (- y (/ (:height bounds) 2))
-            ;; Offset from middle of viewport
-            vw2 (/ js:window.innerWidth 2)
-            vh2 (/ js:window.innerHeight 2)
-            x (- x vw2)
-            y (- y vh2)
-            ;; apply zoom
-            x (/ x @zoom)
-            y (/ y @zoom)
-            ;; shift back
-            x (+ x vw2)
-            y (+ y vh2)]
-        (println [x y] (:width bounds) (:height bounds))
-        (dom:set-attr el
-          :style {:position "absolute"
-                  ;; :left (str (- x (/ (:width bounds) 2)) "px")
-                  ;; :top (str (- y (/ (:height bounds) 2)) "px")
-                  :transform (str "translate(" x "px" "," y "px" ")")
-                  :left 0
-                  :top 0
-                  :user-select "none"})))))
+            y (- y (/ (:height bounds) 2))]
+        (move-to el x y)))))
 
 (listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
 (listen! js:document ::drag-component "mousemove" handle-global-mouse-move)
@@ -188,40 +206,92 @@
                      (reset! currently-dragging nil)
                      (dom:set-attr (dom:parent (.-target e))
                        :style {:user-select "auto"}))
-          self (solid:signal nil)]
-      [:div {:style {:position "absolute"}
-             :ref (fn [el]
-                    (dom:set-attr el :style {:left (str (rand-int 500) "px")
-                                             :top (str (rand-int 500) "px")}))}
+         ]
+      [:div.draggable.positioned {:ref (fn [el]
+                                         (move-to el
+                                           (+
+                                             (* 0.2 js:window.innerWidth)
+                                             (* 0.6 (rand-int js:window.innerWidth)))
+                                           (+
+                                             (* 0.2 js:window.innerWidth)
+                                             (* 0.6 (rand-int js:window.innerHeight)))))}
        [:span.handle
-        {
-         :on-pointerdown dragstart
+        {:on-pointerdown dragstart
          :on-pointerup dragend}
         "⣿⣿"]
        child])))
+
+(def wire-start (solid:signal nil))
+(def wire-end (solid:signal nil))
+
+(defn center-loc [el]
+  (let [rect (bounding-rect el)]
+    [(+ (:x rect) (/ (:width rect) 2))
+     (+ (:y rect) (/ (:height rect) 2))]))
+
+(defn connector [ref]
+  (solid:dom
+    [:span {:ref
+            (fn [self]
+              (js:requestAnimationFrame
+                (fn []
+                  (println "conn ref raf")
+                  (when (not @ref)
+                    (reset! ref (center-loc self))))))
+            :on-position-changed
+            (fn [e]
+              (println "conn pos" (center-loc (.-target e)))
+              (reset! ref (center-loc (.-target e))))} "⚇"]))
 
 (defn osc-compo [hz]
   (solid:dom
     [draggable
      (solid:dom
-       [:pre
+       [:pre.osc
         "OSC\n"
         hz "Hz"
-        "  ⚇"
+        "  " [connector wire-start]
         ])]))
+
+(defn delta [[x y] [xx yy]]
+  (js:Math.sqrt
+    (+
+      (js:Math.pow (- x xx) 2)
+      (js:Math.pow (- y yy) 2))))
+
+(defn wire [start end]
+  (println "rerender wire")
+  (solid:dom
+    [:div.wire.positioned
+     (if (and @start @end)
+       (let [[x1 y1] @start
+             [x2 y2] @end
+             curve (catenary:getCatenaryCurve
+                     #js {:x x1 :y y1}
+                     #js {:x x2 :y y2}
+                     (* 1.1 (delta [x1 y1] [x2 y2])))
+             _
+             (set! (.-innerHTML (dom:query js:document ".caten-pos"))
+               (str [x1 y1] [x2 y2] "\n"
+                 (first (.-curves curve)) '-> (last (.-curves curve))))]
+         [:div.wire.positioned
+          (for [[cpx cpy x y] (oget curve :curves)]
+            [:div.positioned {:style {:transform (str "translate(" x "px," y "px" ")")}}
+             "·"])])
+       [:div.wire])]))
 
 (defn speaker []
   (solid:dom
     [draggable
      (solid:dom
-       [:pre
+       [:pre.speaker
         "     _\n"
-        "    /|   ⢁ \n"
-        "⚉ [⣿ } ⡱ ⡇ \n"
-        "    \\|   ⡈ \n"
+        "    /| · ⢁\n"
+        [connector wire-end]
+        " [⣿{  ⡇ ⡇\n"
+        "    \\| · ⡈\n"
         "     `\n"
-        ])])
-  )
+        ])]))
 
 (defn ui []
   (solid:dom
@@ -231,16 +301,20 @@
                    :left 0
                    :transform-origin "50vw 50vh"}}
      [osc-compo 330.5]
-     [speaker]] )
+     [speaker]
+     [wire wire-start wire-end]] )
   )
-
+[@wire-start @wire-end]
 (defn app []
   (solid:dom
-    (if (not @webaudio:ctx)
+    [:div
+     [:div.mouse-pos {:style {:position "absolute" :top "1rem" :left "1rem"}}]
+     [:pre.caten-pos {:style {:position "absolute" :top "3rem" :left "1rem"}}]
+     (if (not @webaudio:ctx)
       [:button.getting-started {:on-click (webaudio:init!)}
        "Get started!"]
       [ui]
-      )))
+      )]))
 
 (solid:render
   (fn []
