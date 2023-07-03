@@ -2,9 +2,9 @@
   (:import
     [solid :from solid:solid]))
 
-(def camera (solid:signal {:zoom 1
-                           :x 0
-                           :y 0}))
+(defonce camera (solid:signal {:zoom 1
+                               :x 0
+                               :y 0}))
 
 (defn zoom [] (:zoom @camera))
 
@@ -36,11 +36,17 @@
 (defn css-translate [[x y]]
   (str "translate(" x "px," y "px)"))
 
-(defn zoom-by! [amount]
+(defn zoom-by! [amount [x y]]
   (swap! camera (fn [c]
-                  (update c :zoom
-                    (fn [z]
-                      (max 0.1 (+ z amount)))))))
+                  (let [new-zoom (max 0.1 (+ (:zoom c) amount))
+                        new-c (assoc c :zoom new-zoom)
+                        new-pos [(* x (/ new-zoom (:zoom c)))
+                                 (* y (/ new-zoom (:zoom c)))]
+                        dxs (- (first new-pos) x)
+                        dys (- (second new-pos) y)]
+                    {:zoom new-zoom
+                     :x (- (:x c) (* dxs new-zoom))
+                     :y (- (:y c) (* dys new-zoom))}))))
 
 (defn move-by! [[dx dy]]
   (swap! camera (fn [c]

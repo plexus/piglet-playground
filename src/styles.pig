@@ -26,8 +26,9 @@
      {:color "hsl(200, 20%, 70%)"
       :cursor "grab"
       :font-size "130%"
-      :letter-spacing "-0.15em"
-      :margin-left "-0.12em"}]
+      ;; :letter-spacing "-0.15em"
+      :margin-left "-0.08em"
+      }]
 
     [:.dragging
      {:cursor "grabbing"}]

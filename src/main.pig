@@ -93,7 +93,7 @@
           (.stopImmediatePropagation e))))))
 
 (defn handle-scrollwheel-zoom [e]
-  (camera:zoom-by! (* (.-deltaY e) -0.0001))
+  (camera:zoom-by! (* (.-deltaY e) -0.0001) [(.-clientX e) (.-clientY e)])
   (.preventDefault e))
 
 (dom:listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
@@ -152,27 +152,29 @@
 (defn rand-hsl []
   [(rand-int 360) (rand-int 100) (rand-int 100)])
 
-(defn wire [start end ]
+(defn wire [start end]
   (let [wire-opts (solid:signal {:color (rand-hsl)
                                  :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})]
-    (fn []
-      (solid:dom
-        [:div.wire.positioned
-         (if (and @start @end)
-           (let [[x1 y1] @start
-                 [x2 y2] @end
-                 curve (catenary:getCatenaryCurve
-                         #js {:x x1 :y y1}
-                         #js {:x x2 :y y2}
-                         (* 1.1 (delta [x1 y1] [x2 y2])))]
+    (solid:dom
+      [:div.wire.positioned
+       (if (and @start @end)
+         [:div
+          (let [[x1 y1] @start
+                [x2 y2] @end
+                curve (catenary:getCatenaryCurve
+                        #js {:x x1 :y y1}
+                        #js {:x x2 :y y2}
+                        (* 1.1 (delta [x1 y1] [x2 y2])))]
+            [:div
              (for [[cpx cpy x y] (cons [nil nil x1 y1] (oget curve :curves))]
                [:div.positioned
                 {:style {:color (css-hsl (:color @wire-opts))
                          :transform (camera:css-translate [x y])
-                         :on-click (reset! wire-opts {:color (rand-hsl)
-                                                      :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})}}
-                (:glyph @wire-opts)]))
-           [:div.wire])]))))
+                         :on-click (fn [e]
+                                     (reset! wire-opts {:color (rand-hsl)
+                                                        :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )}))}}
+                (:glyph @wire-opts)])])]
+         [:div.wire])])))
 ;; /wire
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -180,13 +182,13 @@
   (solid:dom
     [:div.positioned
      [:div
-      [:button {:on-click (camera:zoom-by! -0.1)} "-"]
+      [:button {:on-click (camera:zoom-by! -0.1 [0 0])} "-"]
       [:label "zoom"]
       [:input {:style {:width "5em"}
                :value (camera:zoom)
                :on-change (fn [e]
                             (swap! camera:camera assoc :zoom (js:parseFloat (.-value (.-target e)))))}]
-      [:button {:on-click (camera:zoom-by! 0.1)} "+"]]
+      [:button {:on-click (camera:zoom-by! 0.1 [0 0])} "+"]]
 
      [:div
       [:button {:on-click (camera:move-by! [-10 0])} "-"]
@@ -287,8 +289,8 @@
                                       (let [self (.-target e)]
                                         (when (and (not @currently-dragging)
                                         (= 1 (.-buttons e)))
-                                      (camera:move-by! [(* (.-movementX e) (camera:zoom))
-                                                        (* (.-movementY e) (camera:zoom))]))))
+                                          (camera:move-by! [(.-movementX e)
+                                                            (.-movementY e)]))))
                     }
            [inspect-pos]
            [osc-compo 330.5]
