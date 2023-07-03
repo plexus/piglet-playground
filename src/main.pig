@@ -2,129 +2,28 @@
   (:import
     [solid :from solid:solid]
     [dom :from piglet:dom]
-    [styling :from styling]
+    [camera :from camera]
+    [styles :from styles]
     [webaudio :from webaudio]
+    [c :from components]
     [solid-js :from "solid-js"]
     [solid-web :from "solid-js/web"]
     [catenary :from "/self/node_modules/catenary-curve/lib/catenary-curve.js"]))
 
-(styling:style!
-  (list
-    [:body {:background-color "#f5d576"
-            :font-family "monospace"
-            :overflow "hidden"
-            :margin 0
-            :user-select "none"}]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; DOM/event/math helpers
 
-    [:pre {:margin 0}]
+(defn delta [[x y] [xx yy]]
+  (js:Math.sqrt
+    (+
+      (js:Math.pow (- x xx) 2)
+      (js:Math.pow (- y yy) 2))))
 
-    [:#app
-     {:display :flex
-      :width "100vw"
-      :height "100vh"
-      :justify-content :center
-      :align-items :center}]
+(defn vp->scene [pos]
+  (camera:viewport->scene @camera:camera pos))
 
-    [:.handle
-     {:color "hsla(200, 20%, 70%)"
-      :cursor "grab"
-      :font-size "130%"}]
-    [:.dragging {:cursor "grabbing"}]
-
-    [:input
-     {:width "30px"
-      :height "200px"
-      :padding "1rem"}]
-
-    [:button
-     {:font-size "1.5rem"
-      :border "none"
-      :border-radius "0.5rem"
-      :box-shadow "rgba(100, 100, 111, 0.2) 0px 7px 29px 0px"}]
-
-    [:.getting-started
-     {:font-size "2rem"
-      :padding "1rem 2rem"}]
-
-    [:.stack
-     {:display "flex"
-      :flex-direction "column"
-      :justify-contet "center"
-      :text-align "center"}]
-
-    [:.flex
-     {:display "flex"}]
-
-    [:.positioned
-     {:position "absolute"
-      :top 0 :left 0}]
-    ))
-
-(def sliders (solid:signal []))
-
-(def slide-count (solid:reaction (count @sliders)))
-
-(def slide-reactions
-  (solid:reaction
-    (for [idx (range @slide-count)]
-      (solid:reaction
-        (assoc (get @sliders idx) :idx idx)))))
-
-(defn ctrl [idx]
-  (solid:reaction (get-in @sliders [idx :val])))
-
-(defn slider [opts]
-  (let [opts @opts
-        val (:val opts)
-        min (:min opts 0)
-        max (:max opts 1000)
-        step (:step opts 1)
-        label (:label opts)]
-    (fn []
-      (solid:dom
-        [:div.stack
-         [:div max]
-         [:input {:type "range"
-                  :min min
-                  :max max
-                  :orient "vertical"
-                  :value val
-                  :step step
-                  :on-input (fn [e] (swap! sliders assoc-in [(:idx opts) :val]
-                                      (js:parseFloat (.-value (.-target e)) 10)))}]
-         [:div min]
-         [:div label]]))))
-
-(defn suspend-button []
-  (let [susp? (solid:signal (webaudio:suspended?))]
-    (solid:dom
-      [:button {:on-click (do
-                            (reset! susp? (not (webaudio:suspended?)))
-                            (if (webaudio:suspended?)
-                              (webaudio:resume!)
-                              (webaudio:suspend!)))}
-       (if @susp? [:span "▶️"] [:span "⏸️"])])))
-
-(defn sliders-ui []
-  (solid:dom
-    [:div.flex
-     (for [r @slide-reactions]
-       [slider r])]))
-
-(defmacro defonce [sym form]
-  `(when (not (resolve '~sym))
-     (def ~sym ~form)))
-
-(defonce LISTENERS (js:Symbol (str `LISTENERS)))
-
-(defn listen! [el k evt f]
-  (when (not (oget el LISTENERS))
-    (oset el LISTENERS (reference {})))
-  (let [listeners (oget el LISTENERS)]
-    (when-let [l (get-in @listeners [k evt])]
-      (.removeEventListener el evt k))
-    (swap! listeners assoc-in [k evt] f)
-    (.addEventListener el evt f)))
+(defn scene->vp [pos]
+  (camera:scene->viewport @camera:camera pos))
 
 (defn event-pos [e]
   (if-let [touches (.-touches e)]
@@ -135,66 +34,72 @@
                     [0 0]
                     touches)]
         [(/ x (count touches)) (/ y (count touches))]))
-    [(.-clientX e) (.-clientY e)]))
+    (vp->scene [(.-clientX e) (.-clientY e)])))
 
 (defn bounding-rect [el]
-  (->pig (.getBoundingClientRect el)))
+  (let [rect (.getBoundingClientRect el)
+        [x y] (vp->scene [(.-x rect) (.-y rect)])
+        zoom (camera:zoom)]
+    {:x x :y y
+     :width (.-width rect)
+     :height (.-height rect)}))
 
-(def currently-dragging (reference nil))
-(def zoom (solid:signal 1))
-
-(defn rand-int [n]
-  (js:Math.round (* n (js:Math.random))))
-
+(defn center-pos [el]
+  (let [rect (.getBoundingClientRect el)]
+    (vp->scene
+      [(+ (.-x rect) #_(/ (.-width rect) 2))
+       (+ (.-y rect) #_(/ (.-height rect) 2))])))
 
 (defn move-to [el x y]
-  (let [;; Offset from middle of viewport
-        vw2 (/ js:window.innerWidth 2)
-        vh2 (/ js:window.innerHeight 2)
-        x (- x vw2)
-        y (- y vh2)
-        ;; apply zoom
-        x (/ x @zoom)
-        y (/ y @zoom)
-        ;; shift back
-        x (+ x vw2)
-        y (+ y vh2)]
-    (dom:set-attr el
-      :style {:position "absolute"
-              ;; :left (str (- x (/ (:width bounds) 2)) "px")
-              ;; :top (str (- y (/ (:height bounds) 2)) "px")
-              :transform (str "translate(" x "px" "," y "px" ")")
-              :left 0
-              :top 0
-              })
-    (let [event (js:CustomEvent. "position-changed" #js {:bubbles "false"})]
-      ((fn dispatch [el]
-         (.dispatchEvent el event)
-         (run! dispatch (into-array (dom:children el)))) el))))
+  #_(let [[x y] (vp->scene [x y])])
+  (dom:set-attr el :style {:transform (camera:css-translate [x y])})
+  (let [event (js:CustomEvent. "position-changed" #js {:bubbles "false"})]
+    ((fn dispatch [el]
+       (.dispatchEvent el event)
+       (run! dispatch (into-array (dom:children el)))) el)))
+
+(defmacro defcomponent [comp-name argv & body]
+  (let [add-class (fn add-class [form]
+                    (cond
+                      (vector? form)
+                      (if (keyword? (first form))
+                        `[~(keyword (str (name (first form)) "." comp-name))
+                          ~@(rest form)]
+                        form)
+                      (list? form)
+                      `(~@(butlast form) ~(add-class (last form)))
+                      :else
+                      form))]
+    `(defn ~comp-name ~argv
+       ~@(butlast body)
+       (solid:dom ~(add-class (last body))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; draggable
+
+(def currently-dragging (reference nil))
 
 (defn handle-global-mouse-move [e]
-  (set! (.-innerHTML (dom:query js:document ".mouse-pos"))
-    (print-str (event-pos e)))
-  (when-let [el @currently-dragging]
+  (if-let [el @currently-dragging]
     (if (= 0 (.-buttons e))
       (reset! currently-dragging nil)
-      (let [handle (dom:query el ".handle")
-            bounds (bounding-rect handle)
-            [x y] (event-pos e)
-            ;; Offset to middle of handle
-            x (- x (/ (:width bounds) 2))
-            y (- y (/ (:height bounds) 2))]
-        (move-to el x y)))))
+      (when-let [handle (dom:query el ".handle")]
+        (let [hrect (bounding-rect handle)
+              [x y] (event-pos e)]
+          (println hrect [x y])
+          (move-to el
+            (- x (/ (:width hrect) 2))
+            (- y (/ (:height hrect) 2)))
+          (.stopImmediatePropagation e))))))
 
-(listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
-(listen! js:document ::drag-component "mousemove" handle-global-mouse-move)
-(listen! js:document ::drag-component "touchmove" handle-global-mouse-move)
-(listen! js:document ::zoom "wheel"
-  (fn [e]
-    (println (.-deltaY e) @zoom)
-    (swap! zoom (fn [z]
-                  (max 0.1 (+ z (* (.-deltaY e) -0.0001)))))
-    (.preventDefault e)))
+(defn handle-scrollwheel-zoom [e]
+  (camera:zoom-by! (* (.-deltaY e) -0.0001))
+  (.preventDefault e))
+
+(dom:listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
+(dom:listen! js:document ::drag-component "mousemove" (resolve 'handle-global-mouse-move))
+(dom:listen! js:document ::drag-component "touchmove" (resolve 'handle-global-mouse-move))
+(dom:listen! js:document ::zoom "wheel" (resolve 'handle-scrollwheel-zoom))
 
 (defn draggable [child]
   (solid:dom
@@ -203,10 +108,7 @@
                       (reset! currently-dragging (dom:parent (.-target e))))
           dragend  (fn [e]
                      (.remove (.-classList (.-target e)) "dragging")
-                     (reset! currently-dragging nil)
-                     (dom:set-attr (dom:parent (.-target e))
-                       :style {:user-select "auto"}))
-         ]
+                     (reset! currently-dragging nil))]
       [:div.draggable.positioned {:ref (fn [el]
                                          (move-to el
                                            (+
@@ -221,27 +123,90 @@
         "⣿⣿"]
        child])))
 
+;; /draggable
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; wire
+
 (def wire-start (solid:signal nil))
 (def wire-end (solid:signal nil))
-
-(defn center-loc [el]
-  (let [rect (bounding-rect el)]
-    [(+ (:x rect) (/ (:width rect) 2))
-     (+ (:y rect) (/ (:height rect) 2))]))
+(def inspect-self (solid:signal nil))
 
 (defn connector [ref]
   (solid:dom
     [:span {:ref
             (fn [self]
+              (reset! inspect-self self)
               (js:requestAnimationFrame
                 (fn []
-                  (println "conn ref raf")
                   (when (not @ref)
-                    (reset! ref (center-loc self))))))
+                    (reset! ref (center-pos self))))))
             :on-position-changed
             (fn [e]
-              (println "conn pos" (center-loc (.-target e)))
-              (reset! ref (center-loc (.-target e))))} "⚇"]))
+              (reset! ref (center-pos (.-target e))))} "⚇"]))
+
+(defn css-hsl [[deg sat light]]
+  (str "hsl(" deg "," sat "%,", light "%)"))
+
+(defn rand-hsl []
+  [(rand-int 360) (rand-int 100) (rand-int 100)])
+
+(defn wire [start end ]
+  (let [wire-opts (solid:signal {:color (rand-hsl)
+                                 :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})]
+    (fn []
+      (solid:dom
+        [:div.wire.positioned
+         (if (and @start @end)
+           (let [[x1 y1] @start
+                 [x2 y2] @end
+                 curve (catenary:getCatenaryCurve
+                         #js {:x x1 :y y1}
+                         #js {:x x2 :y y2}
+                         (* 1.1 (delta [x1 y1] [x2 y2])))]
+             (for [[cpx cpy x y] (cons [nil nil x1 y1] (oget curve :curves))]
+               [:div.positioned
+                {:style {:color (css-hsl (:color @wire-opts))
+                         :transform (camera:css-translate [x y])
+                         :on-click (reset! wire-opts {:color (rand-hsl)
+                                                      :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})}}
+                (:glyph @wire-opts)]))
+           [:div.wire])]))))
+;; /wire
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn camera-controls []
+  (solid:dom
+    [:div.positioned
+     [:div
+      [:button {:on-click (camera:zoom-by! -0.1)} "-"]
+      [:label "zoom"]
+      [:input {:style {:width "5em"}
+               :value (camera:zoom)
+               :on-change (fn [e]
+                            (swap! camera:camera assoc :zoom (js:parseFloat (.-value (.-target e)))))}]
+      [:button {:on-click (camera:zoom-by! 0.1)} "+"]]
+
+     [:div
+      [:button {:on-click (camera:move-by! [-10 0])} "-"]
+      [:label "x"]
+      [:input {:style {:width "5em"}
+               :value (:x @camera:camera)
+               :on-change (fn [e]
+                            (swap! camera:camera assoc :x (js:parseFloat (.-value (.-target e)))))}]
+      [:button {:on-click (camera:move-by! [10 0])} "+"]]
+
+     [:div
+      [:button {:on-click (camera:move-by! [0 -10])} "-"]
+      [:label "y"]
+      [:input {:style {:width "5em"}
+               :value (:y @camera:camera)
+               :on-change (fn [e]
+                            (swap! camera:camera assoc :y (js:parseFloat (.-value (.-target e)))))}]
+      [:button {:on-click (camera:move-by! [0 10])} "+"]]
+     ]))
+
 
 (defn osc-compo [hz]
   (solid:dom
@@ -252,33 +217,6 @@
         hz "Hz"
         "  " [connector wire-start]
         ])]))
-
-(defn delta [[x y] [xx yy]]
-  (js:Math.sqrt
-    (+
-      (js:Math.pow (- x xx) 2)
-      (js:Math.pow (- y yy) 2))))
-
-(defn wire [start end]
-  (println "rerender wire")
-  (solid:dom
-    [:div.wire.positioned
-     (if (and @start @end)
-       (let [[x1 y1] @start
-             [x2 y2] @end
-             curve (catenary:getCatenaryCurve
-                     #js {:x x1 :y y1}
-                     #js {:x x2 :y y2}
-                     (* 1.1 (delta [x1 y1] [x2 y2])))
-             _
-             (set! (.-innerHTML (dom:query js:document ".caten-pos"))
-               (str [x1 y1] [x2 y2] "\n"
-                 (first (.-curves curve)) '-> (last (.-curves curve))))]
-         [:div.wire.positioned
-          (for [[cpx cpy x y] (oget curve :curves)]
-            [:div.positioned {:style {:transform (str "translate(" x "px," y "px" ")")}}
-             "·"])])
-       [:div.wire])]))
 
 (defn speaker []
   (solid:dom
@@ -293,63 +231,80 @@
         "     `\n"
         ])]))
 
+(defn posinfo [el]
+  (when el
+    (let [rect (.getBoundingClientRect el)]
+      {:bounds
+       {:x (.-x rect)
+        :y (.-y rect)
+        :width (.-width rect)
+        :height (.-height rect)}
+       :scene
+       {:vp->scene (vp->scene [(.-x rect) (.-y rect)])
+        }})))
+
+(defn inspect-pos []
+  (let [info (solid:signal nil)]
+    (solid:dom
+      [draggable
+       (solid:dom
+         [:div {:ref
+                (fn [s]
+                  ;; (reset! inspect-self s)
+                  (reset! info (posinfo @inspect-self)))
+                :on-position-changed
+                (fn [e] (reset! info (posinfo @inspect-self)))
+                :on-click
+                (fn [e] (reset! info (posinfo @inspect-self)))}
+          (for [[head kvs] @info]
+            [:div
+             [:h5 (str head)]
+             (for [[k v] kvs]
+               [:p (str k) "=" (str v)])])]
+         )])))
+
+(defn inspect-pane [info]
+  (solid:dom
+    [draggable
+     (solid:dom
+       [:div
+        (for [[head kvs] @info]
+          [:div
+           [:h5 (str head)]
+           (for [[k v] kvs]
+             [:p (str k) "=" (str v)])])])]))
+
 (defn ui []
-  (solid:dom
-    [:div {:style {:transform (str "scale(" @zoom ")")
-                   :position "absolute"
-                   :top 0
-                   :left 0
-                   :transform-origin "50vw 50vh"}}
-     [osc-compo 330.5]
-     [speaker]
-     [wire wire-start wire-end]] )
-  )
-[@wire-start @wire-end]
-(defn app []
-  (solid:dom
-    [:div
-     [:div.mouse-pos {:style {:position "absolute" :top "1rem" :left "1rem"}}]
-     [:pre.caten-pos {:style {:position "absolute" :top "3rem" :left "1rem"}}]
-     (if (not @webaudio:ctx)
-      [:button.getting-started {:on-click (webaudio:init!)}
-       "Get started!"]
-      [ui]
-      )]))
+  (let [panning? (solid:signal false)]
+    (solid:dom
+      [:div
+       [camera:wrap-camera
+        (solid:dom
+          [:div.ui {:class (if @panning? ["dragging"] [""])
+                    :on-pointerdown (fn [_] (reset! panning? true))
+                    :on-pointerup (fn [_] (reset! panning? false))
+                    :on-pointermove (fn [e]
+                                      (let [self (.-target e)]
+                                        (when (and (not @currently-dragging)
+                                        (= 1 (.-buttons e)))
+                                      (camera:move-by! [(* (.-movementX e) (camera:zoom))
+                                                        (* (.-movementY e) (camera:zoom))]))))
+                    }
+           [inspect-pos]
+           [osc-compo 330.5]
+           [speaker]
+           [wire wire-start wire-end]
+           ])]
+       [camera-controls]])))
 
 (solid:render
   (fn []
-    (solid:dom [app]))
+    (solid:dom [:div.app
+                (if (not @webaudio:ctx)
+                  [:button.getting-started {:on-click (webaudio:init!)}
+                   "Get started!"]
+                  [ui])]))
   (dom:el-by-id js:document "app"))
 
 (doseq [[k v] webaudio]
   (.intern *current-module* (name k) @v))
-
-(comment
-
-  (swap! sliders conj {:min 0 :max 1 :step 0.01 :val 0 :label "MAIN"})
-  (swap! sliders conj {:min 0 :max 200 :val 0 :label "LFO FREQ"})
-  (swap! sliders conj {:min 0 :max 10 :val 0 :label "LFO DEPTH"})
-  (swap! sliders conj {:min 50 :max 1000 :val 0 :label "FREQ"})
-
-  (do @sliders)
-
-  (def o
-    (gain {:in
-           (osc {:frequency (mix
-                              (gain {:in (osc {:frequency (ctrl 1) :type "sine"})
-                                     :gain (ctrl 2)})
-                              (constant {:offset (ctrl 3)}))
-                 :type "square"})
-           :gain (ctrl 0)}))
-
-  (plug m (dest))
-  (plug o (dest))
-
-  (unplug o (dest))
-  (do @slider-value)
-
-  (.start m)
-  (.stop o)
-  (.suspend @ctx)
-  (.resume @ctx)
-  )
