@@ -169,10 +169,9 @@
              (for [[cpx cpy x y] (cons [nil nil x1 y1] (oget curve :curves))]
                [:div.positioned
                 {:style {:color (css-hsl (:color @wire-opts))
-                         :transform (camera:css-translate [x y])
-                         :on-click (fn [e]
-                                     (reset! wire-opts {:color (rand-hsl)
-                                                        :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )}))}}
+                         :transform (camera:css-translate [x y])}
+                 :on-click (reset! wire-opts {:color (rand-hsl)
+                                              :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})}
                 (:glyph @wire-opts)])])]
          [:div.wire])])))
 ;; /wire
@@ -290,8 +289,7 @@
                                         (when (and (not @currently-dragging)
                                         (= 1 (.-buttons e)))
                                           (camera:move-by! [(.-movementX e)
-                                                            (.-movementY e)]))))
-                    }
+                                                            (.-movementY e)]))))}
            [inspect-pos]
            [osc-compo 330.5]
            [speaker]

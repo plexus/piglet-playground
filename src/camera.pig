@@ -36,17 +36,28 @@
 (defn css-translate [[x y]]
   (str "translate(" x "px," y "px)"))
 
-(defn zoom-by! [amount [x y]]
-  (swap! camera (fn [c]
-                  (let [new-zoom (max 0.1 (+ (:zoom c) amount))
-                        new-c (assoc c :zoom new-zoom)
-                        new-pos [(* x (/ new-zoom (:zoom c)))
-                                 (* y (/ new-zoom (:zoom c)))]
-                        dxs (- (first new-pos) x)
-                        dys (- (second new-pos) y)]
-                    {:zoom new-zoom
-                     :x (- (:x c) (* dxs new-zoom))
-                     :y (- (:y c) (* dys new-zoom))}))))
+(let [zoom 1
+      ratio 1.41
+      new-zoom (* zoom ratio)
+      [fixed-point-x fixed-point-y] [100 100]
+      [offset-x offset-y] [0 0]]
+  [(- offset-x (- fixed-point-x (/ fixed-point-x new-zoom)))
+   (- offset-y (- fixed-point-x (/ fixed-point-x new-zoom)))])
+
+(defn zoom-by! [ratio [fixed-point-x fixed-point-y]]
+  (println ratio [fixed-point-x fixed-point-y]
+    [(:x @camera) (:y @camera)])
+  (swap! camera
+    (fn [c]
+      (let [ratio (+ 1 ratio)
+            zoom (:zoom c)
+            new-zoom (* zoom ratio)
+            offset-x (:x c)
+            offset-y (:y c)]
+        {:zoom new-zoom
+         :x (- offset-x (- fixed-point-x (/ fixed-point-x new-zoom)))
+         :y (- offset-y (- fixed-point-x (/ fixed-point-x new-zoom)))}
+        ))))
 
 (defn move-by! [[dx dy]]
   (swap! camera (fn [c]
