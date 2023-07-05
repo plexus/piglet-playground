@@ -2,15 +2,18 @@
   (:import
     [styling :from styling]))
 
+(def mono-font "'fantasque_sans_monoregular'" )
+
 (styling:style!
   (list
     [:body {:background-color "#f5d576"
-            :font-family "'DejaVu Sans Mono', monospace"
+            :font-family mono-font
             :overflow "hidden"
             :margin 0
             :user-select "none"}]
 
-    [:pre {:margin 0}]
+    [:pre {:margin 0
+           :font-family mono-font}]
 
     [:#app
      {:display :flex
@@ -26,9 +29,24 @@
      {:color "hsl(200, 20%, 70%)"
       :cursor "grab"
       :font-size "130%"
-      ;; :letter-spacing "-0.15em"
+      :letter-spacing "-0.145em"
       :margin-left "-0.08em"
       }]
+
+    [:.connector
+     {:line-height "1em"
+      :width "1em"
+      :height "1em"
+      :display "inline-block"}]
+
+    [:.wire
+     {:text-align "center"}
+     [:.segment {:margin-top "-10px"
+                 :margin-left "-10px"
+
+
+                 :width "1em"
+                 :height "1em"}]]
 
     [:.dragging
      {:cursor "grabbing"}]

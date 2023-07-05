@@ -6,6 +6,7 @@
     [styles :from styles]
     [webaudio :from webaudio]
     [c :from components]
+    [geom :from dom-geom]
     [solid-js :from "solid-js"]
     [solid-web :from "solid-js/web"]
     [catenary :from "/self/node_modules/catenary-curve/lib/catenary-curve.js"]))
@@ -13,11 +14,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; DOM/event/math helpers
 
-(defn delta [[x y] [xx yy]]
+(defn delta [p1 p2]
   (js:Math.sqrt
     (+
-      (js:Math.pow (- x xx) 2)
-      (js:Math.pow (- y yy) 2))))
+      (js:Math.pow (- (:x p1) (:x p2)) 2)
+      (js:Math.pow (- (:y p1) (:y p2)) 2))))
 
 (defn vp->scene [pos]
   (camera:viewport->scene @camera:camera pos))
@@ -26,33 +27,28 @@
   (camera:scene->viewport @camera:camera pos))
 
 (defn event-pos [e]
-  (if-let [touches (.-touches e)]
-    (let [touches (into-array touches)]
-      (let [[x y] (reduce
+  (geom:point
+    (if-let [touches (.-touches e)]
+      (let [touches (into-array touches)
+            [x y] (reduce
                     (fn [[x y] touch]
                       [(+ x (.-clientX touch)) (+ y (.-clientY touch))])
                     [0 0]
                     touches)]
-        [(/ x (count touches)) (/ y (count touches))]))
-    (vp->scene [(.-clientX e) (.-clientY e)])))
+        [(/ x (count touches)) (/ y (count touches))])
+      [(.-clientX e) (.-clientY e)])))
 
 (defn bounding-rect [el]
-  (let [rect (.getBoundingClientRect el)
-        [x y] (vp->scene [(.-x rect) (.-y rect)])
-        zoom (camera:zoom)]
-    {:x x :y y
-     :width (.-width rect)
-     :height (.-height rect)}))
+  (.getBoundingClientRect el))
 
 (defn center-pos [el]
-  (let [rect (.getBoundingClientRect el)]
+  (let [rect (bounding-rect el)]
     (vp->scene
-      [(+ (.-x rect) #_(/ (.-width rect) 2))
-       (+ (.-y rect) #_(/ (.-height rect) 2))])))
+      [(+ (.-x rect) (/ (.-width rect) 2))
+       (+ (.-y rect) (/ (.-height rect) 2))])))
 
-(defn move-to [el x y]
-  #_(let [[x y] (vp->scene [x y])])
-  (dom:set-attr el :style {:transform (camera:css-translate [x y])})
+(defn move-to [el point]
+  (dom:set-attr el :style {:transform (camera:css-translate point)})
   (let [event (js:CustomEvent. "position-changed" #js {:bubbles "false"})]
     ((fn dispatch [el]
        (.dispatchEvent el event)
@@ -85,11 +81,12 @@
       (reset! currently-dragging nil)
       (when-let [handle (dom:query el ".handle")]
         (let [hrect (bounding-rect handle)
-              [x y] (event-pos e)]
-          (println hrect [x y])
-          (move-to el
-            (- x (/ (:width hrect) 2))
-            (- y (/ (:height hrect) 2)))
+              point (event-pos e)]
+          (move-to el (vp->scene (geom:p+
+                                   point
+                                   (geom:p*
+                                     (geom:point (:width hrect) (:height hrect))
+                                     0.5))))
           (.stopImmediatePropagation e))))))
 
 (defn handle-scrollwheel-zoom [e]
@@ -111,12 +108,13 @@
                      (reset! currently-dragging nil))]
       [:div.draggable.positioned {:ref (fn [el]
                                          (move-to el
-                                           (+
-                                             (* 0.2 js:window.innerWidth)
-                                             (* 0.6 (rand-int js:window.innerWidth)))
-                                           (+
-                                             (* 0.2 js:window.innerWidth)
-                                             (* 0.6 (rand-int js:window.innerHeight)))))}
+                                           (vp->scene [
+                                                       (+
+                                                         (* 0.2 js:window.innerWidth)
+                                                         (* 0.6 (rand-int js:window.innerWidth)))
+                                                       (+
+                                                         (* 0.2 js:window.innerWidth)
+                                                         (* 0.6 (rand-int js:window.innerHeight)))])))}
        [:span.handle
         {:on-pointerdown dragstart
          :on-pointerup dragend}
@@ -135,16 +133,17 @@
 
 (defn connector [ref]
   (solid:dom
-    [:span {:ref
-            (fn [self]
-              (reset! inspect-self self)
-              (js:requestAnimationFrame
-                (fn []
-                  (when (not @ref)
-                    (reset! ref (center-pos self))))))
-            :on-position-changed
-            (fn [e]
-              (reset! ref (center-pos (.-target e))))} "⚇"]))
+    [:span.connector
+     {:ref
+      (fn [self]
+        (reset! inspect-self self)
+        (js:requestAnimationFrame
+          (fn []
+            (when (not @ref)
+              (reset! ref (center-pos self))))))
+      :on-position-changed
+      (fn [e]
+        (reset! ref (center-pos (.-target e))))} "⚇"]))
 
 (defn css-hsl [[deg sat light]]
   (str "hsl(" deg "," sat "%,", light "%)"))
@@ -159,17 +158,15 @@
       [:div.wire.positioned
        (if (and @start @end)
          [:div
-          (let [[x1 y1] @start
-                [x2 y2] @end
-                curve (catenary:getCatenaryCurve
-                        #js {:x x1 :y y1}
-                        #js {:x x2 :y y2}
-                        (* 1.1 (delta [x1 y1] [x2 y2])))]
+          (let [curve (catenary:getCatenaryCurve
+                        @start
+                        @end
+                        (* 1.1 (delta @start @end) (max 1 (/ 500 (delta @start @end)))))]
             [:div
-             (for [[cpx cpy x y] (cons [nil nil x1 y1] (oget curve :curves))]
-               [:div.positioned
+             (for [[cpx cpy x y] (butlast (oget curve :curves))]
+               [:div.positioned.segment
                 {:style {:color (css-hsl (:color @wire-opts))
-                         :transform (camera:css-translate [x y])}
+                         :transform (camera:css-translate (geom:point x y))}
                  :on-click (reset! wire-opts {:color (rand-hsl)
                                               :glyph (rand-nth "⚬⦁⦂⚲☌◦◌⏺⎊⎉⎈⍤" )})}
                 (:glyph @wire-opts)])])]
@@ -186,25 +183,25 @@
       [:input {:style {:width "5em"}
                :value (camera:zoom)
                :on-change (fn [e]
-                            (swap! camera:camera assoc :zoom (js:parseFloat (.-value (.-target e)))))}]
+                            (camera:set-zoom! (js:parseFloat (.-value (.-target e)))))}]
       [:button {:on-click (camera:zoom-by! 0.1 [0 0])} "+"]]
 
      [:div
       [:button {:on-click (camera:move-by! [-10 0])} "-"]
       [:label "x"]
       [:input {:style {:width "5em"}
-               :value (:x @camera:camera)
+               :value (:e @camera:camera)
                :on-change (fn [e]
-                            (swap! camera:camera assoc :x (js:parseFloat (.-value (.-target e)))))}]
+                            (camera:set-pan-x! (js:parseFloat (.-value (.-target e)))))}]
       [:button {:on-click (camera:move-by! [10 0])} "+"]]
 
      [:div
       [:button {:on-click (camera:move-by! [0 -10])} "-"]
       [:label "y"]
       [:input {:style {:width "5em"}
-               :value (:y @camera:camera)
+               :value (:f @camera:camera)
                :on-change (fn [e]
-                            (swap! camera:camera assoc :y (js:parseFloat (.-value (.-target e)))))}]
+                            (camera:set-pan-y! (js:parseFloat (.-value (.-target e)))))}]
       [:button {:on-click (camera:move-by! [0 10])} "+"]]
      ]))
 

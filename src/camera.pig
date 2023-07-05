@@ -1,69 +1,48 @@
 (module camera
   (:import
-    [solid :from solid:solid]))
+    [solid :from solid:solid]
+    [geom :from dom-geom]))
 
-(defonce camera (solid:signal {:zoom 1
-                               :x 0
-                               :y 0}))
+(defonce camera (solid:signal (geom:ident)))
 
-(defn zoom [] (:zoom @camera))
+(defn update-camera! [& ms]
+  (apply swap! camera geom:m* ms))
 
-(defn viewport->scene [camera [x y]]
-  (let [zoom (:zoom camera)
-        cx (:x camera)
-        cy (:y camera)]
-    [(/ (- x cx) zoom) (/ (- y cy) zoom)]))
+(defn zoom [] (:a @camera))
 
-(defn scene->viewport [camera [x y]]
-  (let [zoom (:zoom camera)
-        cx (:x camera)
-        cy (:y camera)]
-    [(+ (* x zoom) cx) (+ (* y zoom) cy)]))
+(defn viewport->scene [camera point]
+  (geom:m*v (geom:inverse camera) point))
 
-(defn translate-pos [camera [x y]]
-  (let [zoom (:zoom camera)
-        cx (:x camera)
-        cy (:y camera)]
-    [(- x (/ cx zoom)) (- y (/ cy zoom))]
-    ))
+(defn scene->viewport [camera point]
+  (geom:m*v camera point))
 
 (defn css-transform [camera]
-  (let [zoom (:zoom camera)
-        cx (:x camera)
-        cy (:y camera)]
-    (str "translate(" cx "px," cy "px) scale(" zoom ")")))
+  (geom:m->css camera))
 
-(defn css-translate [[x y]]
-  (str "translate(" x "px," y "px)"))
+(defn css-translate [point]
+  (str "translate(" (:x point) "px," (:y point) "px)"))
 
-(let [zoom 1
-      ratio 1.41
-      new-zoom (* zoom ratio)
-      [fixed-point-x fixed-point-y] [100 100]
-      [offset-x offset-y] [0 0]]
-  [(- offset-x (- fixed-point-x (/ fixed-point-x new-zoom)))
-   (- offset-y (- fixed-point-x (/ fixed-point-x new-zoom)))])
-
-(defn zoom-by! [ratio [fixed-point-x fixed-point-y]]
-  (println ratio [fixed-point-x fixed-point-y]
-    [(:x @camera) (:y @camera)])
+(defn set-zoom! [z]
   (swap! camera
-    (fn [c]
-      (let [ratio (+ 1 ratio)
-            zoom (:zoom c)
-            new-zoom (* zoom ratio)
-            offset-x (:x c)
-            offset-y (:y c)]
-        {:zoom new-zoom
-         :x (- offset-x (- fixed-point-x (/ fixed-point-x new-zoom)))
-         :y (- offset-y (- fixed-point-x (/ fixed-point-x new-zoom)))}
-        ))))
+    (fn [c] (geom:matrix [z (:b c) (:c c) z (:e c) (:f c)]))))
+
+(defn set-pan-x! [x]
+  (swap! camera
+    (fn [c] (geom:matrix [(:a c) (:b c) (:c c) (:d c) x (:f c)]))))
+
+(defn set-pan-y! [y]
+  (swap! camera
+    (fn [c] (geom:matrix [(:a c) (:b c) (:c c) (:d c) (:e c) y]))))
+
+(defn zoom-by! [ratio p]
+  (let [point (viewport->scene @camera (geom:point p))]
+    (update-camera!
+      (geom:translate (:x point) (:y point))
+      (geom:scale (+ 1 ratio))
+      (geom:translate (- (:x point)) (- (:y point))))))
 
 (defn move-by! [[dx dy]]
-  (swap! camera (fn [c]
-                  (-> c
-                    (update :x + dx)
-                    (update :y + dy)))))
+  (update-camera! (geom:translate (/ dx (zoom)) (/ dy (zoom)))))
 
 (defn wrap-camera [& children]
   (solid:dom

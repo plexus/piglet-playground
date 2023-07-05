@@ -20,6 +20,26 @@
   (-seq [this]
     (list (.-x this) (.-y this) (.-z this) (.-w this))))
 
+(extend-type js:DOMRect
+  Lookup
+  (-get [this arg]
+    (cond
+      (= arg :x) (.-x this)
+      (= arg :y) (.-y this)
+      (= arg :width) (.-width this)
+      (= arg :height) (.-height this)
+      :else nil))
+  (-get [this arg fallback]
+    (cond
+      (= arg :x) (.-x this)
+      (= arg :y) (.-y this)
+      (= arg :width) (.-width this)
+      (= arg :height) (.-height this)
+      :else fallback))
+  Seqable
+  (-seq [this]
+    (list (.-x this) (.-y this) (.-width this) (.-height this))))
+
 (extend-type js:DOMMatrixReadOnly
   Lookup
   (-get [this arg]
@@ -74,11 +94,34 @@
 (defn translate [x y]
   (matrix [1 0 0 1 x y]))
 
+(defn ident []
+  (matrix [1 0 0 1 0 0]))
+
 (defn m* [m & ms]
   (reduce (fn [a b] (.multiply a b)) m ms))
 
-(defn m*p [m p]
+(defn m*v [m p]
   (.transformPoint m (point p)))
+
+(def m*p m*v) ;; alias, p=point, v=vector
+
+(defn p+ [p1 p2 & ps]
+  (reduce p+
+    (point
+      (+ (:x p1) (:x p2))
+      (+ (:y p1) (:y p2))
+      (+ (:z p1) (:z p2)))
+    ps))
+
+(defn p* [p scalar]
+  (point
+    (* (:x p) scalar)
+    (* (:y p) scalar)
+    (* (:z p) scalar)
+    (:w p)))
 
 (defn m->css [m]
   (.toString m))
+
+(defn inverse [m]
+  (.inverse m))
