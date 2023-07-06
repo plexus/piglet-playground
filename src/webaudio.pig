@@ -1,7 +1,7 @@
 (module webaudio
   (:import [solid :from solid:solid]))
 
-(def ctx (solid:signal nil))
+(defonce ctx (solid:signal nil))
 
 (defn init! []
   (reset! ctx (js:AudioContext.)))
@@ -11,6 +11,9 @@
 
 (defn plug [from to]
   (.connect from to))
+
+(defn connect [from to idx1 idx2]
+  (.connect from to idx1 idx2))
 
 (defn unplug [from to]
   (.disconnect from to))
