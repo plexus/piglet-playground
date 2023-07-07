@@ -54,9 +54,12 @@
     graph))
 
 (defn ctl! [node-id param value]
-  (webaudio:assign-prop
-    (get-in @graph [:nodes node-id :object])
-    param value))
+  (swap! graph
+    (fn [g]
+      (webaudio:assign-prop
+        (get-in @graph [:nodes node-id :object])
+        param value)
+      (assoc-in g [:nodes node-id param] value))))
 
 (swap! graph (fn [g] (-> g start-nodes connect-wires)))
 

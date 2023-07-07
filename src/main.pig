@@ -1,11 +1,13 @@
 (module main
   (:import
+    [scene :from scene]
     [solid :from solid:solid]
     [dom :from piglet:dom]
     [camera :from camera]
     [styles :from styles]
     [webaudio :from webaudio]
     [c :from components]
+    [draggable :from draggable]
     [geom :from dom-geom]
     [solid-js :from "solid-js"]
     [solid-web :from "solid-js/web"]
@@ -20,39 +22,11 @@
       (js:Math.pow (- (:x p1) (:x p2)) 2)
       (js:Math.pow (- (:y p1) (:y p2)) 2))))
 
-(defn vp->scene [pos]
-  (camera:viewport->scene @camera:camera pos))
-
-(defn scene->vp [pos]
-  (camera:scene->viewport @camera:camera pos))
-
-(defn event-pos [e]
-  (geom:point
-    (if-let [touches (.-touches e)]
-      (let [touches (into-array touches)
-            [x y] (reduce
-                    (fn [[x y] touch]
-                      [(+ x (.-clientX touch)) (+ y (.-clientY touch))])
-                    [0 0]
-                    touches)]
-        [(/ x (count touches)) (/ y (count touches))])
-      [(.-clientX e) (.-clientY e)])))
-
-(defn bounding-rect [el]
-  (.getBoundingClientRect el))
-
 (defn center-pos [el]
-  (let [rect (bounding-rect el)]
-    (vp->scene
+  (let [rect (.getBoundingClientRect el)]
+    (camera:vp->scene
       [(+ (.-x rect) (/ (.-width rect) 2))
        (+ (.-y rect) (/ (.-height rect) 2))])))
-
-(defn move-to [el point]
-  (dom:set-attr el :style {:transform (camera:css-translate point)})
-  (let [event (js:CustomEvent. "position-changed" #js {:bubbles "false"})]
-    ((fn dispatch [el]
-       (.dispatchEvent el event)
-       (run! dispatch (into-array (dom:children el)))) el)))
 
 (defmacro defcomponent [comp-name argv & body]
   (let [add-class (fn add-class [form]
@@ -70,56 +44,6 @@
        ~@(butlast body)
        (solid:dom ~(add-class (last body))))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; draggable
-
-(def currently-dragging (reference nil))
-
-(defn handle-global-mouse-move [e]
-  (if-let [el @currently-dragging]
-    (if (= 0 (.-buttons e))
-      (reset! currently-dragging nil)
-      (when-let [handle (dom:query el ".handle")]
-        (let [hrect (bounding-rect handle)
-              point (event-pos e)]
-          (move-to el (vp->scene (geom:p+
-                                   point
-                                   (geom:p*
-                                     (geom:point (:width hrect) (:height hrect))
-                                     0.5))))
-          (.stopImmediatePropagation e))))))
-
-(defn handle-scrollwheel-zoom [e]
-  (camera:zoom-by! (* (.-deltaY e) -0.0001) [(.-clientX e) (.-clientY e)])
-  (.preventDefault e))
-
-(dom:listen! js:document ::drag-component "mouseup" (fn [_] (reset! currently-dragging nil)))
-(dom:listen! js:document ::drag-component "mousemove" (resolve 'handle-global-mouse-move))
-(dom:listen! js:document ::drag-component "touchmove" (resolve 'handle-global-mouse-move))
-(dom:listen! js:document ::zoom "wheel" (resolve 'handle-scrollwheel-zoom))
-
-(defn draggable [child]
-  (solid:dom
-    (let [dragstart (fn [e]
-                      (.add (.-classList (.-target e)) "dragging")
-                      (reset! currently-dragging (dom:parent (.-target e))))
-          dragend  (fn [e]
-                     (.remove (.-classList (.-target e)) "dragging")
-                     (reset! currently-dragging nil))]
-      [:div.draggable.positioned {:ref (fn [el]
-                                         (move-to el
-                                           (vp->scene [
-                                                       (+
-                                                         (* 0.2 js:window.innerWidth)
-                                                         (* 0.6 (rand-int js:window.innerWidth)))
-                                                       (+
-                                                         (* 0.2 js:window.innerWidth)
-                                                         (* 0.6 (rand-int js:window.innerHeight)))])))}
-       [:span.handle
-        {:on-pointerdown dragstart
-         :on-pointerup dragend}
-        "⣿⣿"]
-       child])))
 
 ;; /draggable
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -208,7 +132,7 @@
 
 (defn osc-compo [hz]
   (solid:dom
-    [draggable
+    [draggable:draggable
      (solid:dom
        [:pre.osc
         "OSC\n"
@@ -218,7 +142,7 @@
 
 (defn speaker []
   (solid:dom
-    [draggable
+    [draggable:draggable
      (solid:dom
        [:pre.speaker
         "     _\n"
@@ -228,49 +152,6 @@
         "    \\| · ⡈\n"
         "     `\n"
         ])]))
-
-(defn posinfo [el]
-  (when el
-    (let [rect (.getBoundingClientRect el)]
-      {:bounds
-       {:x (.-x rect)
-        :y (.-y rect)
-        :width (.-width rect)
-        :height (.-height rect)}
-       :scene
-       {:vp->scene (vp->scene [(.-x rect) (.-y rect)])
-        }})))
-
-(defn inspect-pos []
-  (let [info (solid:signal nil)]
-    (solid:dom
-      [draggable
-       (solid:dom
-         [:div {:ref
-                (fn [s]
-                  ;; (reset! inspect-self s)
-                  (reset! info (posinfo @inspect-self)))
-                :on-position-changed
-                (fn [e] (reset! info (posinfo @inspect-self)))
-                :on-click
-                (fn [e] (reset! info (posinfo @inspect-self)))}
-          (for [[head kvs] @info]
-            [:div
-             [:h5 (str head)]
-             (for [[k v] kvs]
-               [:p (str k) "=" (str v)])])]
-         )])))
-
-(defn inspect-pane [info]
-  (solid:dom
-    [draggable
-     (solid:dom
-       [:div
-        (for [[head kvs] @info]
-          [:div
-           [:h5 (str head)]
-           (for [[k v] kvs]
-             [:p (str k) "=" (str v)])])])]))
 
 (defn ui []
   (let [panning? (solid:signal false)]
@@ -283,15 +164,16 @@
                     :on-pointerup (fn [_] (reset! panning? false))
                     :on-pointermove (fn [e]
                                       (let [self (.-target e)]
-                                        (when (and (not @currently-dragging)
-                                        (= 1 (.-buttons e)))
+                                        (when (and
+                                                (not @draggable:currently-dragging)
+                                                (= 1 (.-buttons e)))
                                           (camera:move-by! [(.-movementX e)
                                                             (.-movementY e)]))))}
-           [inspect-pos]
            [osc-compo 330.5]
            [speaker]
            [wire wire-start wire-end]
            ])]
+       #_
        [camera-controls]])))
 
 (solid:render
@@ -305,3 +187,8 @@
 
 (doseq [[k v] webaudio]
   (.intern *current-module* (name k) @v))
+
+(set!
+  (.-required
+    (ensure-module (fqn *current-module*)))
+  true)

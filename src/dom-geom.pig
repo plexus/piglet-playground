@@ -125,3 +125,8 @@
 
 (defn inverse [m]
   (.inverse m))
+
+(set!
+  (.-required
+    (ensure-module (fqn *current-module*)))
+  true)

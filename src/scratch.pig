@@ -79,3 +79,47 @@
   (.suspend @ctx)
   (.resume @ctx)
   )
+
+(defn posinfo [el]
+  (when el
+    (let [rect (.getBoundingClientRect el)]
+      {:bounds
+       {:x (.-x rect)
+        :y (.-y rect)
+        :width (.-width rect)
+        :height (.-height rect)}
+       :scene
+       {:camera/vp->scene (camera:vp->scene [(.-x rect) (.-y rect)])
+        }})))
+
+(defn inspect-pos []
+  (let [info (solid:signal nil)]
+    (solid:dom
+      [draggable:draggable
+       (solid:dom
+         [:div {:ref
+                (fn [s]
+                  ;; (reset! inspect-self s)
+                  (reset! info (posinfo @inspect-self)))
+                :on-position-changed
+                (fn [e] (reset! info (posinfo @inspect-self)))
+                :on-click
+                (fn [e] (reset! info (posinfo @inspect-self)))}
+          (for [[head kvs] @info]
+            [:div
+             [:h5 (str head)]
+             (for [[k v] kvs]
+               [:p (str k) "=" (str v)])])]
+         )])))
+
+
+(defn inspect-pane [info]
+  (solid:dom
+    [draggable:draggable
+     (solid:dom
+       [:div
+        (for [[head kvs] @info]
+          [:div
+           [:h5 (str head)]
+           (for [[k v] kvs]
+             [:p (str k) "=" (str v)])])])]))

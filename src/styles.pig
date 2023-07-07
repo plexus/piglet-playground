@@ -6,7 +6,7 @@
 
 (styling:style!
   (list
-    [:body {:background-color "#f5d576"
+    [:body {:background-color "hsl(41, 100%, 76%)"
             :font-family mono-font
             :overflow "hidden"
             :margin 0

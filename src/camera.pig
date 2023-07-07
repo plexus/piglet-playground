@@ -3,13 +3,10 @@
     [solid :from solid:solid]
     [geom :from dom-geom]))
 
+;; Mutable camera
 (defonce camera (solid:signal (geom:ident)))
 
-(defn update-camera! [& ms]
-  (apply swap! camera geom:m* ms))
-
-(defn zoom [] (:a @camera))
-
+;; Pure functions over camera values
 (defn viewport->scene [camera point]
   (geom:m*v (geom:inverse camera) point))
 
@@ -21,6 +18,18 @@
 
 (defn css-translate [point]
   (str "translate(" (:x point) "px," (:y point) "px)"))
+
+;; Functions that manipulate the camera reference
+(defn update-camera! [& ms]
+  (apply swap! camera geom:m* ms))
+
+(defn vp->scene [pos]
+  (camera:viewport->scene @camera:camera pos))
+
+(defn scene->vp [pos]
+  (camera:scene->viewport @camera:camera pos))
+
+(defn zoom [] (:a @camera))
 
 (defn set-zoom! [z]
   (swap! camera
@@ -43,6 +52,8 @@
 
 (defn move-by! [[dx dy]]
   (update-camera! (geom:translate (/ dx (zoom)) (/ dy (zoom)))))
+
+;; DOM integration
 
 (defn wrap-camera [& children]
   (solid:dom
