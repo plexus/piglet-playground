@@ -7,6 +7,7 @@
     [styles :from styles]
     [webaudio :from webaudio]
     [c :from components]
+    [model :from model]
     [draggable :from draggable]
     [geom :from dom-geom]
     [solid-js :from "solid-js"]
@@ -133,6 +134,7 @@
 (defn osc-compo [hz]
   (solid:dom
     [draggable:draggable
+     {:init-pos (geom:point 0 0)}
      (solid:dom
        [:pre.osc
         "OSC\n"
@@ -143,6 +145,7 @@
 (defn speaker []
   (solid:dom
     [draggable:draggable
+     {:init-pos (geom:point 200 0)}
      (solid:dom
        [:pre.speaker
         "     _\n"
@@ -169,9 +172,11 @@
                                                 (= 1 (.-buttons e)))
                                           (camera:move-by! [(.-movementX e)
                                                             (.-movementY e)]))))}
-           [osc-compo 330.5]
-           [speaker]
-           [wire wire-start wire-end]
+           ;; [osc-compo 330.5]
+           ;; [speaker]
+           ;; [wire wire-start wire-end]
+           (for [c (keys (:nodes @model:graph))]
+             [c:render c])
            ])]
        #_
        [camera-controls]])))

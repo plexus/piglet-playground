@@ -54,24 +54,18 @@
 (dom:listen! js:document ::drag-component "touchmove" (resolve 'handle-global-mouse-move))
 (dom:listen! js:document ::zoom "wheel" (resolve 'handle-scrollwheel-zoom))
 
-(defn draggable [child]
+(defn draggable [props child]
   (solid:dom
     (let [dragstart (fn [e]
                       (.add (.-classList (.-target e)) "dragging")
                       (reset! currently-dragging (dom:parent (.-target e))))
           dragend  (fn [e]
                      (.remove (.-classList (.-target e)) "dragging")
-                     (reset! currently-dragging nil))]
+                     (reset! currently-dragging nil))
+          pos-handler (:on-position-changed props)]
       [:div.draggable.positioned
-       {:ref (fn [el]
-               (move-to el
-                 (camera:vp->scene
-                   [(+
-                      (* 0.2 js:window.innerWidth)
-                      (* 0.6 (rand-int js:window.innerWidth)))
-                    (+
-                      (* 0.2 js:window.innerWidth)
-                      (* 0.6 (rand-int js:window.innerHeight)))])))}
+       {:ref (fn [el] (move-to el (:init-pos props)))
+        :on-position-changed (if pos-handler pos-handler identity)}
        [:span.handle
         {:on-pointerdown dragstart
          :on-pointerup dragend}

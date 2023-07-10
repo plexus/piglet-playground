@@ -3,35 +3,28 @@
     [solid :from solid:solid]
     [webaudio :from webaudio]))
 
+(defmulti start! :type)
+
+(defmethod start! :default [c]
+  ((resolve (:type c)) (dissoc c :type)))
+
 (def graph
   (solid:signal
-    {:nodes {"osc1" {:type webaudio:osc
-                     :frequency 440
-                     :type "square"}
-             "lfo" {:type webaudio:osc
-                    :frequency 10
-                    :type "sine"}
-             "lfo-gain" {:type webaudio:gain
-                         :gain 10}
-             "master" {:type webaudio:gain
-                       :desc "Master bus"
-                       :gain 0.0}
-             "speaker" {:type webaudio:dest}
-             "lfo-const" {:type webaudio:constant
-                          :offset 300}}
-     :edges [["master" "speaker"]
-             ["osc1" "master"]
-             ["lfo" "lfo-gain"]
-             ["lfo-gain" ["osc1" :frequency]]
-             ["lfo-const" ["osc1" :frequency]]
-             ]}))
+    {}
+    ))
+
+(defn nodes []
+  (for [[k v] (:nodes @graph)]
+    (assoc v :id k)))
+
+(defn node [id]
+  (solid:cursor graph [:nodes id]))
 
 (defn start-nodes [graph]
   (update graph :nodes
     (fn [nodes]
       (reduce (fn [acc [k v]]
-                (assoc acc k (assoc v :object ((:type v) (dissoc v :type))))
-                )
+                (assoc acc k (assoc v :object (start! v))))
         {}
         nodes))))
 
@@ -41,7 +34,6 @@
       (println "connecting" from to)
       (let [[from from-idx] (if (vector? from) from [from 0])
             [to to-idx]   (if (vector? to) to [to 0])]
-        (println "connecting" from from-idx to to-idx)
         (if (keyword? to-idx)
           (do
             (println 'webaudio:connect
@@ -61,8 +53,59 @@
         param value)
       (assoc-in g [:nodes node-id param] value))))
 
-(swap! graph (fn [g] (-> g start-nodes connect-wires)))
+(defn set-prop! [node-id prop value]
+  (swap! graph
+    (fn [g]
+      (assoc-in g [:nodes node-id prop] value))))
 
-(ctl! "master" :gain 0)
-(ctl! "lfo" :frequency 3)
-(ctl! "lfo-gain" :gain 135)
+;; (swap! graph (fn [g] (-> g start-nodes connect-wires)))
+
+;; (ctl! "master" :gain 0)
+;; (ctl! "lfo" :frequency 1)
+;; (ctl! "osc1" :frequency 150)
+;; (ctl! "lfo-gain" :gain 135)
+
+(comment
+
+  (reset! graph
+    {:nodes {"osc1" {:type `webaudio:osc
+                     :frequency 440
+                     :type "square"
+                     :position [300 300]}
+             "lfo" {:type `webaudio:osc
+                    :frequency 10
+                    :type "sine"
+                    :position [300 100]}
+             "lfo-gain" {:type `webaudio:gain
+                         :gain 10
+                         :position [300 200]}
+             "master" {:type `webaudio:gain
+                       :desc "Master bus"
+                       :gain 0.0
+                       :position [300 400]}
+             "speaker" {:type `webaudio:dest
+                        :position [300 500]}
+             "lfo-const" {:type `webaudio:constant
+                          :offset 300
+                          :position [200 200]}}
+     :edges [["master" "speaker"]
+             ["osc1" "master"]
+             ["lfo" "lfo-gain"]
+             ["lfo-gain" ["osc1" :frequency]]
+             ["lfo-const" ["osc1" :frequency]]
+             ]})
+
+
+
+  (do @graph)
+
+  {:edges [["master", "speaker"], ["osc1", "master"], ["lfo", "lfo-gain"], ["lfo-gain", ["osc1", :frequency]], ["lfo-const", ["osc1", :frequency]]],
+   :nodes {"osc1" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:osc, :frequency 440, :type "square", :position [300, 300]}
+           "lfo" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:osc, :frequency 10, :type "sine", :position [300, 100]}
+           "lfo-gain" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:gain, :gain 10, :position [300, 200]}
+           "master" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:gain, :desc "Master bus", :gain 0, :position [300, 400]}
+           "speaker" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:dest, :position [300, 500]}
+           "lfo-const" {:type https://piglet-lang.org/packages/piglet-playground:webaudio:constant, :offset 300, :position [200, 200]}
+           :edges {:position [0, 0]}
+           :nodes {:position [0, 0]}}}
+  )

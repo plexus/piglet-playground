@@ -25,24 +25,25 @@
   (instance? js:AudioParam n))
 
 (defn assign-prop [o k v]
-  (let [prop (oget o k)]
-    (cond
-      (= :in k)
-      (plug v o)
+  (when o
+    (let [prop (oget o k)]
+      (cond
+        (= :in k)
+        (plug v o)
 
-      (satisfies? solid:Signal v)
-      (solid:effect
-        (assign-prop o k @v))
+        (satisfies? solid:Signal v)
+        (solid:effect
+          (assign-prop o k @v))
 
-      (param? prop)
-      (if (node? v)
-        (plug v prop)
-        (.setValueAtTime prop v (now)))
+        (param? prop)
+        (if (node? v)
+          (plug v prop)
+          (.setValueAtTime prop v (now)))
 
-      :else
-      (if (and (node? v) (node? prop))
-        (plug v prop)
-        (oset o k v)))))
+        :else
+        (if (and (node? v) (node? prop))
+          (plug v prop)
+          (oset o k v))))))
 
 (defn assign-props [o props]
   (doseq [[k v] props]
