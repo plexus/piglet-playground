@@ -88,7 +88,7 @@
                         @end
                         (* 1.1 (delta @start @end) (max 1 (/ 500 (delta @start @end)))))]
             [:div
-             (for [[cpx cpy x y] (butlast (oget curve :curves))]
+             (for [[cpx cpy x y] (butlast (get curve :curves))]
                [:div.positioned.segment
                 {:style {:color (css-hsl (:color @wire-opts))
                          :transform (camera:css-translate (geom:point x y))}

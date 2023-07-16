@@ -39,9 +39,9 @@
             (println 'webaudio:connect
               (webaudio:node? (node from))
               (node from)
-              (webaudio:param? (oget (node to) to-idx))
-              (oget (node to) to-idx) from-idx)
-            (.connect (node from) (oget (node to) to-idx) from-idx))
+              (webaudio:param? (get (node to) to-idx))
+              (get (node to) to-idx) from-idx)
+            (.connect (node from) (get (node to) to-idx) from-idx))
           (webaudio:connect (node from) (node to) from-idx to-idx))))
     graph))
 

@@ -26,7 +26,7 @@
 
 (defn assign-prop [o k v]
   (when o
-    (let [prop (oget o k)]
+    (let [prop (get o k)]
       (cond
         (= :in k)
         (plug v o)
@@ -43,7 +43,7 @@
         :else
         (if (and (node? v) (node? prop))
           (plug v prop)
-          (oset o k v))))))
+          (assoc! o k v))))))
 
 (defn assign-props [o props]
   (doseq [[k v] props]
