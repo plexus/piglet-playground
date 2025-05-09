@@ -7,7 +7,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; draggable
 
-(def currently-dragging (reference nil))
+(def currently-dragging (box nil))
 
 (defn event-pos [e]
   (geom:point
@@ -35,7 +35,7 @@
   (when-let [el @currently-dragging]
     (if (= 0 (.-buttons e))
       (reset! currently-dragging nil)
-      (when-let [handle (dom:query el ".handle")]
+      (when-let [handle (dom:query-one el ".handle")]
         (let [hrect (bounding-rect handle)
               point (event-pos e)]
           (move-to el (camera:vp->scene (geom:p+
@@ -55,14 +55,14 @@
 (dom:listen! js:document ::zoom "wheel" (resolve 'handle-scrollwheel-zoom))
 
 (defn draggable [props child]
-  (solid:dom
-    (let [dragstart (fn [e]
-                      (.add (.-classList (.-target e)) "dragging")
-                      (reset! currently-dragging (dom:parent (.-target e))))
-          dragend  (fn [e]
-                     (.remove (.-classList (.-target e)) "dragging")
-                     (reset! currently-dragging nil))
-          pos-handler (:on-position-changed props)]
+  (let [dragstart (fn [x]
+                    (.add (.-classList (.-target x)) "dragging")
+                    (reset! currently-dragging (dom:parent (.-target x))))
+        dragend  (fn [x]
+                   (.remove (.-classList (.-target x)) "dragging")
+                   (reset! currently-dragging nil))
+        pos-handler (:on-position-changed props)]
+    (solid:dom
       [:div.draggable.positioned
        {:ref (fn [el] (move-to el (:init-pos props)))
         :on-position-changed (if pos-handler pos-handler identity)}

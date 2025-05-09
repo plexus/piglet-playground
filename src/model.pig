@@ -10,8 +10,7 @@
 
 (def graph
   (solid:signal
-    {}
-    ))
+    {}))
 
 (defn nodes []
   (for [[k v] (:nodes @graph)]
@@ -65,8 +64,12 @@
 ;; (ctl! "osc1" :frequency 150)
 ;; (ctl! "lfo-gain" :gain 135)
 
-(comment
+(def foo (solid:signal {:foo 1}))
+(reset! foo {})
+(foo)
 
+(js:console.log graph)
+(comment
   (reset! graph
     {:nodes {"osc1" {:type `webaudio:osc
                      :frequency 440

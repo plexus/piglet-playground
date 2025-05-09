@@ -178,7 +178,7 @@
            (for [c (keys (:nodes @model:graph))]
              [c:render c])
            ])]
-       #_
+
        [camera-controls]])))
 
 (solid:render
